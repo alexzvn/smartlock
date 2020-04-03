@@ -54,15 +54,45 @@ const int servoUnlock = 90;
 const int servoLock = 120;
 Servo myservo;
 
+//***************************************************
+//*           WIFI CONFIG                           *
+//***************************************************
+
+bool hasRequest = false;
+
+#define CMD_SEND_BEGIN    "AT+CIPSEND=0"
+#define CMD_SEND_END    "AT+CIPCLOSE=0"
+
+#define PROTOCOL_HTTP     80
+#define PROTOCOL_HTTPS    443
+#define PROTOCOL_FTP      21
+#define PROTOCOL_CURRENT  PROTOCOL_HTTP
+
+#define CHAR_CR     0x0D
+#define CHAR_LF     0x0A
+
+#define STRING_EMPTY  ""
+
+#define DELAY_SEED  1000
+#define DELAY_1X    (1*DELAY_SEED)
+#define DELAY_2X    (2*DELAY_SEED)
+#define DELAY_3X    (3*DELAY_SEED)
+#define DELAY_4X    (4*DELAY_SEED)
+#define DELAY_5X    (5*DELAY_SEED)
+
+#define WIFI_NAME "doom"
+#define WIFI_PASS "12345678"
+
 void setup() {
+	delay(DELAY_5X);
+
 	pinMode(lockMotor, OUTPUT);
 	pinMode(redLED, OUTPUT);
 	pinMode(greenLED, OUTPUT);
 	pinMode(programSwitch, INPUT);
 	pinMode(hallPin, INPUT);
 
-	Serial.begin(9600);
-	Serial.println("Program start.");
+	Serial.begin(115200);
 
 	myservo.attach(servoPin);
 	SPI.begin();
@@ -70,27 +100,55 @@ void setup() {
 
 	digitalWrite(greenLED, HIGH); // Để đèn xanh trong trạng thái chờ
 	triggerDoorlock();
+  delay(3000);
+  initESP8266();
 }
 
 void loop() {
-	// lắng nghe cảm biến, nếu có tiếng gõ
-	knockSensorValue = analogRead(knockSensor);
 
-	if (digitalRead(programSwitch) == HIGH) { // nếu đã nhấn nút
-		programButtonPressed = true; // lưu lại sự kiện
-		digitalWrite(redLED, HIGH); // và hiện đèn đỏ
-	} else {
-		programButtonPressed = false;
-		digitalWrite(redLED, LOW);
-	}
+  // lắng nghe cảm biến, nếu có tiếng gõ
+  knockSensorValue = analogRead(knockSensor);
+
+  if (digitalRead(programSwitch) == HIGH) { // nếu đã nhấn nút
+    programButtonPressed = true; // lưu lại sự kiện
+    digitalWrite(redLED, HIGH); // và hiện đèn đỏ
+  } else {
+    programButtonPressed = false;
+    digitalWrite(redLED, LOW);
+  }
+
+  while(Serial.available())
+  {
+    bufferingRequest(Serial.read());
+  }
+
+  if(hasRequest == true)
+  {
+    String htmlResponse ="<!doctype html>"
+          "<html>"
+          "<head>"
+            "<title>Door DEMO</title>"
+          "</head>"
+          "<body>"
+            "<h1>Door Remote DEMO</h1>"
+            "<h3><a href='http://192.168.4.1/?DOOR=DOOR_ON_ON_ON'>Mo Khoa </a></h3>"
+          "</body>"
+          "</html>";
+
+    String beginSendCmd = String(CMD_SEND_BEGIN) + "," + htmlResponse.length();
+    sendCommand(beginSendCmd, DELAY_1X);
+    sendCommand(htmlResponse, DELAY_2X);
+    sendCommand(CMD_SEND_END, DELAY_1X);
+    hasRequest = false;
+  }
 
 	if (isLock == true) { //Nếu cửa đã khóa
 		pressToOpen();
 		if (knockSensorValue >= threshold) { // nếu có gõ cửa
-			Serial.println(knockSensorValue);
+			//Serial.println(knockSensorValue);
 			listenToSecretKnock();
 		} else {
-			isCard(); //check xem có thẻ hay không
+			//isCard(); //check xem có thẻ hay không
 		}
 	}
 
@@ -102,7 +160,6 @@ void loop() {
 
 // Sự kiện khi người dùng gõ cửa
 void listenToSecretKnock() {
-	Serial.println("Gõ Bắt Đầu");
 
 	bool is_use_card = false;
 	int i = 0;
@@ -133,7 +190,6 @@ void listenToSecretKnock() {
 		knockSensorValue = analogRead(knockSensor);
 		if (knockSensorValue >= threshold) { //thêm một tiếng gõ
 
-			Serial.println("Gõ.");
 			now = millis();
 			knockReadings[currentKnockNumber] = now - startTime; //lưu lại khoảng thời gian so với lần gõ trước
 			currentKnockNumber++;
@@ -162,7 +218,6 @@ void listenToSecretKnock() {
 		if (validateKnock() == true && isCard() == false) { //nếu không sử dụng thẻ để mở thì tiếp tục
 			triggerDoorUnlock();
 		} else {
-			Serial.println("Mở cửa thất bại.");
 			digitalWrite(greenLED, LOW); // nếu mở cửa thất bại, nháy đèn đỏ báo hiệu.
 			for (i = 0; i < 4; i++) {
 				digitalWrite(redLED, HIGH);
@@ -175,7 +230,6 @@ void listenToSecretKnock() {
 	} else { //Nếu trong khi tạo thiết lập kiểu gõ mới, vẫn xác thực lại chỉ không mở cửa
 		validateKnock();
 		// và nháy đèn xanh/đỏ luân phiên để thể hiện đã được thiết lập
-		Serial.println("New lock stored.");
 		digitalWrite(redLED, LOW);
 		digitalWrite(greenLED, HIGH);
 		for (i = 0; i < 3; i++) {
@@ -191,14 +245,12 @@ void listenToSecretKnock() {
 //Chạy động cơ servo để mở khóa
 void triggerDoorUnlock() {
 	isLock = false;
-	Serial.println("Đã mở cửa!");
 	myservo.write(90); // mở cửa
-	delay(5000);
+	delay(3000);
 }
 
 void triggerDoorlock() {
 	isLock = true;
-	Serial.println("Đã khóa cửa!");
 	myservo.write(180); // khóa cửa
 	delay(2000);
 }
@@ -299,7 +351,6 @@ boolean isCard() {
 	if (rfid.isCard()) {
 		if (rfid.readCardSerial()) // Nếu có thẻ
 		{
-			Serial.println();
 			for (i = 0; i < 5; i++) {
 				reading_card[i] = rfid.serNum[i];
 			}
@@ -336,4 +387,54 @@ boolean isCard() {
 	}
 
 	return false;
+}
+
+
+void initESP8266()
+{
+  sendCommand("AT+RST", DELAY_2X);
+  sendCommand("AT+CWMODE=2", DELAY_3X);
+  sendCommand(String("AT+CWSAP=\"") + WIFI_NAME + String("\",\"") + WIFI_PASS + String("\",1,4"), DELAY_3X);
+  sendCommand("AT+CIFSR", DELAY_1X);
+  sendCommand("AT+CIPMUX=1", DELAY_1X);
+  sendCommand(String("AT+CIPSERVER=1,") + PROTOCOL_CURRENT, DELAY_1X);
+}
+
+void bufferingRequest(char c)
+{
+  static String bufferData = STRING_EMPTY;
+
+  switch (c)
+  {
+    case CHAR_CR:
+      break;
+    case CHAR_LF:
+    {
+      STDIOProcedure(bufferData);
+      bufferData = STRING_EMPTY;
+    }
+      break;
+    default:
+      bufferData += c;
+  }
+}
+
+void STDIOProcedure(const String& command)
+{
+  hasRequest = command.startsWith("+IPD,");
+
+  if(command.indexOf("DOOR_ON_ON_ON") != -1)
+  {
+    triggerDoorUnlock();
+  }
+}
+
+void sendCommand(const String& msg, int dt)
+{
+  Serial.println(msg);
+  delay(dt);
+  while(Serial.available())
+  {
+    Serial.read();
+  }
 }
