@@ -20,7 +20,7 @@ const int servoPin       = 8; // Chân điều khiển servo
 const int hallPin        = 6; // Chân cảm biến từ trường
 
 //Cẫu hình nhận biết
-const int threshold          = 35;     // tín hiệu nhỏ nhất để xác định là một tiếng gõ
+const int threshold          = 40;     // tín hiệu nhỏ nhất để xác định là một tiếng gõ
 const int rejectValue        = 25;     // Tỉ lệ phần trăm khác nhau giữa khoảng thời gian một tiếng gõ, nếu lớn hơn thì không mở khóa
 const int averageRejectValue = 15;     // If the average timing of the knocks is off by this percent we don't unlock.
 const int knockFadeTime      = 150;    // milis dây delay trước khi lắng nghe tiếng gõ tiếp theo
@@ -34,7 +34,7 @@ int knockReadings[maximumKnocks];       // Khi ai đó gõ cửa, biến này s�
 int knockSensorValue          = 0;      // Lưu lại giá trị trả về từ cảm biến áp điện.
 int hallValue                 = 0;      //giá trị cảm biến từ trường
 int isLock                    = true;   //đã khóa cửa hay chưa
-unsigned long timePressStart            = 0;
+unsigned long timePressStart  = 1;
 int pressTime                 = 0;
 
 bool shouldKeepDoorOpen    = false;
@@ -71,8 +71,8 @@ bool hasRequest = false;
 #define STDIO_DELAY_4X    (4*STDIO_DELAY_SEED)
 #define STDIO_DELAY_5X    (5*STDIO_DELAY_SEED)
 
-#define CMD_SEND_BEGIN    "AT+CIPSEND = 0"
-#define CMD_SEND_END      "AT+CIPCLOSE  = 0"
+#define CMD_SEND_BEGIN    "AT+CIPSEND=0"
+#define CMD_SEND_END      "AT+CIPCLOSE=0"
 
 #define WIFI_NAME         "doom"
 #define WIFI_PASS         "12345678"
@@ -93,8 +93,8 @@ void setup() {
 
 	triggerDoorlock();
 
-	//delay(STDIO_DELAY_5X);
-	//initESP8266();
+	delay(STDIO_DELAY_5X);
+	initESP8266();
 
 	digitalWrite(greenLED, HIGH); // Để đèn xanh trong trạng thái chờ
 }
@@ -105,6 +105,36 @@ void loop() {
 
 	listenEventPress(programSwitch, programButtonPressed);
 	listenEventPress(programSwitch2, programButtonPressed2);
+
+	while(Serial.available())
+	{
+		bufferingRequest(Serial.read());
+	}
+
+	if(hasRequest == true)
+	{
+		String htmlResponse = "<!doctype html>"
+					"<html>"
+					"<head>"
+						"<title>DOOR DEMO</title>"
+					"</head>"
+					"<body style='text-aglin: center'>"
+						"<h1>DOOR REMOTE</h1>"
+						"<h3><a href='http://192.168.4.1/?DOOR=UNLOCK'>Mo Khoa Cua</a></h3>"
+						"<form action='' method='GET'>"
+						"<input type='radio' name='DOOR' value='GUARD_ON' /> Enable Door Guard<br/>"
+						"<input type='radio' name='DOOR' value='GUARD_OFF' /> Disable Door Guard<br/>"
+						"<input type='submit' value='Submit' />"
+						"</form>"
+					"</body>"
+					"</html>";
+
+		String beginSendCmd = String(CMD_SEND_BEGIN) + "," + htmlResponse.length();
+		deliverMessage(beginSendCmd, STDIO_DELAY_1X);
+		deliverMessage(htmlResponse, STDIO_DELAY_1X);
+		deliverMessage(CMD_SEND_END, STDIO_DELAY_1X);
+		hasRequest = false;
+	}
 
 	if (isLock == true) {
 		if (isEnableDoorGuard == true){
@@ -122,8 +152,6 @@ void loop() {
 	if (isLock == false && isHall() && shouldKeepDoorOpen == false) {
 		triggerDoorlock();
 	}
-
-	listenRequest();
 }
 
 bool isHall() {
@@ -143,7 +171,7 @@ void listenEventPress(const int &switchButton, bool &button) {
 // Sự kiện khi người dùng gõ cửa
 void listenToSecretKnock() {
 	if (knockSensorValue <= threshold) { // nếu có gõ cửa
-		Serial.println(knockSensorValue);
+		//Serial.println(knockSensorValue);
 		return;
 	}
 
@@ -340,38 +368,6 @@ bool validateKnock() {
 
 	return true;
 
-}
-
-void listenRequest() {
-	while(Serial.available())
-	{
-		bufferingRequest(Serial.read());
-	}
-
-	if(hasRequest == true)
-	{
-		String htmlResponse = "<!doctype html>"
-					"<html>"
-					"<head>"
-						"<title>DOOR DEMO</title>"
-					"</head>"
-					"<body style='text-aglin: center'>"
-						"<h1>DOOR REMOTE</h1>"
-						"<h3><a href='http://192.168.4.1/?DOOR=UNLOCK'>Mo Khoa Cua</a></h3>"
-						"<form action='' method='GET'>"
-						"<input type='radio' name='DOOR' value='GUARD_ON' /> Enable Door Guard<br/>"
-						"<input type='radio' name='DOOR' value='GUARD_OFF' /> Disable Door Guard<br/>"
-						"<input type='submit' value='Submit' />"
-						"</form>"
-					"</body>"
-					"</html>";
-
-		String beginSendCmd = String(CMD_SEND_BEGIN) + "," + htmlResponse.length();
-		deliverMessage(beginSendCmd, STDIO_DELAY_1X);
-		deliverMessage(htmlResponse, STDIO_DELAY_1X);
-		deliverMessage(CMD_SEND_END, STDIO_DELAY_1X);
-		hasRequest = false;
-	}
 }
 
 void STDIOProcedure(const String& command)
