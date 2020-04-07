@@ -46,9 +46,34 @@ const int servoUnlock = 90;
 const int servoLock = 120;
 Servo myservo;
 
-/****************************************
- *          WIFI CONFIG                 *
-*****************************************/
+//***************************************************
+//*           WIFI CONFIG                           *
+//***************************************************
+
+#define CMD_SEND_BEGIN    "AT+CIPSEND=0"
+#define CMD_SEND_END    "AT+CIPCLOSE=0"
+
+#define STDIO_PROTOCOL_HTTP     80
+#define STDIO_PROTOCOL_HTTPS    443
+#define STDIO_PROTOCOL_FTP      21
+#define STDIO_PROTOCOL_CURRENT  STDIO_PROTOCOL_HTTP
+
+#define STDIO_CHAR_CR     0x0D
+#define STDIO_CHAR_LF     0x0A
+
+#define STDIO_STRING_EMPTY  ""
+
+#define STDIO_DELAY_SEED  1000
+#define STDIO_DELAY_1X    (1*STDIO_DELAY_SEED)
+#define STDIO_DELAY_2X    (2*STDIO_DELAY_SEED)
+#define STDIO_DELAY_3X    (3*STDIO_DELAY_SEED)
+#define STDIO_DELAY_4X    (4*STDIO_DELAY_SEED)
+#define STDIO_DELAY_5X    (5*STDIO_DELAY_SEED)
+
+bool hasRequest = false;
+
+#define WIFI_NAME "doom"
+#define WIFI_PASS "12345678"
 
 void setup() {
 	pinMode(lockMotor, OUTPUT);
@@ -57,13 +82,17 @@ void setup() {
 	pinMode(programSwitch, INPUT);
 	pinMode(hallPin, INPUT);
 
-	Serial.begin(9600);
+	Serial.begin(115200);
 	Serial.println("Program start.");
 
 	myservo.attach(servoPin);
+	
+	triggerDoorlock();
+
+	delay(DELAY_5X);
+	initESP8266();
 
 	digitalWrite(greenLED, HIGH); // Để đèn xanh trong trạng thái chờ
-	triggerDoorlock();
 }
 
 void loop() {
@@ -82,12 +111,13 @@ void loop() {
 		pressToOpen();
 		listenToSecretKnock();
 	}
-	
 
 	if(digitalRead(hallPin) == LOW && isLock == false)  //Nếu cửa chưa đóng và chưa khóa
 	{
 		triggerDoorlock();
 	}
+
+	listenRequest();
 }
 
 void listenEventPress(const int &switchButton, bool &button) {
@@ -300,4 +330,86 @@ boolean validateKnock() {
 
 	return true;
 
+}
+
+void listenRequest() {
+	while(Serial.available())
+	{   
+		bufferingRequest(Serial.read());
+	}
+	
+	if(hasRequest == true) 
+	{
+		String htmlResponse = "<!doctype html>"
+					"<html>"
+					"<head>"
+						"<title>DOOR DEMO</title>"
+					"</head>"
+					"<body style='text-aglin: center'>"
+						"<h1>DOOR REMOTE</h1>"
+						"<h3><a href='http://192.168.4.1/?DOOR=UNLOCK'>Mo Khoa Cua</a></h3>"
+						"<form action='' method='GET'>"
+						"<input type='radio' name='DOOR' value='GUARD_ON' /> Enable Door Guard<br/>"
+						"<input type='radio' name='DOOR' value='GUARD_OFF' /> Disable Door Guard<br/>"
+						"<input type='submit' value='Submit' />"
+						"</form>"
+					"</body>"
+					"</html>";
+		
+		String beginSendCmd = String(CMD_SEND_BEGIN) + "," + htmlResponse.length();
+		deliverMessage(beginSendCmd, STDIO_DELAY_1X);
+		deliverMessage(htmlResponse, STDIO_DELAY_1X);
+		deliverMessage(CMD_SEND_END, STDIO_DELAY_1X);
+		hasRequest = false;
+	}
+}
+
+void STDIOProcedure(const String& command)
+{
+	hasRequest = command.startsWith("+IPD,");
+	
+	if(command.indexOf("GUARD_ON") != -1) { 
+		isEnableDoorGuard = true;
+
+	} else if(command.indexOf("GUARD_OFF") != -1) { 
+		isEnableDoorGuard = false;
+
+	} else if (command.indexOf("UNLOCK") != -1) {
+		triggerDoorUnlock();
+	}
+}
+
+void bufferingRequest(char c)
+{
+  static String bufferData = STDIO_STRING_EMPTY;
+
+  switch (c)
+  {
+    case STDIO_CHAR_CR:
+      break;
+    case STDIO_CHAR_LF:
+    {
+      STDIOProcedure(bufferData);
+      bufferData = STDIO_STRING_EMPTY;
+    }
+      break;
+    default:
+      bufferData += c;
+  }
+} 
+
+void deliverMessage(const String& msg, int dt)
+{
+  Serial.println(msg);
+  delay(dt);
+}
+
+void initESP8266()
+{
+  deliverMessage("AT+RST", STDIO_DELAY_2X);
+  deliverMessage("AT+CWMODE=2", STDIO_DELAY_3X);
+  deliverMessage(String("AT+CWSAP=\"") + WIFI_NAME + String("\",\"") + WIFI_PASS + String("\",1,4"), STDIO_DELAY_3X);
+  deliverMessage("AT+CIFSR", STDIO_DELAY_1X);
+  deliverMessage("AT+CIPMUX=1", STDIO_DELAY_1X);
+  deliverMessage(String("AT+CIPSERVER=1,") + STDIO_PROTOCOL_CURRENT, STDIO_DELAY_1X);  
 }
