@@ -10,32 +10,32 @@
 #include <Servo.h>      // Thư viện điều khiển servo
 
 //Định nghĩa chân pin
-const int knockSensor = 0;   // Cảm biến áp điện
-const int programSwitch = 2; // Nút nhấn
+const int knockSensor    = 0; // Cảm biến áp điện
+const int programSwitch  = 2; // Nút nhấn
 const int programSwitch2 = 7; // Nút nhấn
-const int lockMotor = 8;     // Động cơ mở cửa
-const int redLED = 4;        // LED trạng thái đỏ
-const int greenLED = 5;      // LED trạng thái xanh
-const int servoPin = 8;      // Chân điều khiển servo
-const int hallPin  = 6;      // Chân cảm biến từ trường
+const int lockMotor      = 8; // Động cơ mở cửa
+const int redLED         = 4; // LED trạng thái đỏ
+const int greenLED       = 5; // LED trạng thái xanh
+const int servoPin       = 8; // Chân điều khiển servo
+const int hallPin        = 6; // Chân cảm biến từ trường
 
 //Cẫu hình nhận biết
-const int threshold = 25;          // tín hiệu nhỏ nhất để xác định là một tiếng gõ
-const int rejectValue = 25;        // Tỉ lệ phần trăm khác nhau giữa khoảng thời gian một tiếng gõ, nếu lớn hơn thì không mở khóa
-const int averageRejectValue = 15; // If the average timing of the knocks is off by this percent we don't unlock.
-const int knockFadeTime = 150;     // milis dây delay trước khi lắng nghe tiếng gõ tiếp theo
+const int threshold          = 25;     // tín hiệu nhỏ nhất để xác định là một tiếng gõ
+const int rejectValue        = 25;     // Tỉ lệ phần trăm khác nhau giữa khoảng thời gian một tiếng gõ, nếu lớn hơn thì không mở khóa
+const int averageRejectValue = 15;     // If the average timing of the knocks is off by this percent we don't unlock.
+const int knockFadeTime      = 150;    // milis dây delay trước khi lắng nghe tiếng gõ tiếp theo
 
-const int maximumKnocks = 20;      // Số lần gõ cửa tối đa cho một kiểu gõ
-const int knockComplete = 1200;    // Thời gian chờ lâu nhất để xác nhận gõ cửa xong
+const int maximumKnocks      = 20;     // Số lần gõ cửa tối đa cho một kiểu gõ
+const int knockComplete      = 1200;   // Thời gian chờ lâu nhất để xác nhận gõ cửa xong
 
 // Biến.
 int secretCode[maximumKnocks] = {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int knockReadings[maximumKnocks]; // Khi ai đó gõ cửa, biến này sẽ lưu lại khoảng cách giữa mỗi lần gõ
-int knockSensorValue = 0; // Lưu lại giá trị trả về từ cảm biến áp điện.
-int hallValue = 0;  //giá trị cảm biến từ trường
-int isLock = true;  //đã khóa cửa hay chưa
-int timePressStart = 0;
-int pressTime   = 0;
+int knockReadings[maximumKnocks];       // Khi ai đó gõ cửa, biến này sẽ lưu lại khoảng cách giữa mỗi lần gõ
+int knockSensorValue          = 0;      // Lưu lại giá trị trả về từ cảm biến áp điện.
+int hallValue                 = 0;      //giá trị cảm biến từ trường
+int isLock                    = true;   //đã khóa cửa hay chưa
+int timePressStart            = 0;
+int pressTime                 = 0;
 
 bool programButtonPressed  = false; // nút nhấn cửa bên trong
 bool programButtonPressed2 = false; // nút nhấn cửa bên ngoài
@@ -51,8 +51,7 @@ Servo myservo;
 //*           WIFI CONFIG                           *
 //***************************************************
 
-#define CMD_SEND_BEGIN    "AT+CIPSEND=0"
-#define CMD_SEND_END    "AT+CIPCLOSE=0"
+bool hasRequest = false;
 
 #define STDIO_PROTOCOL_HTTP     80
 #define STDIO_PROTOCOL_HTTPS    443
@@ -71,10 +70,11 @@ Servo myservo;
 #define STDIO_DELAY_4X    (4*STDIO_DELAY_SEED)
 #define STDIO_DELAY_5X    (5*STDIO_DELAY_SEED)
 
-bool hasRequest = false;
+#define CMD_SEND_BEGIN    "AT+CIPSEND = 0"
+#define CMD_SEND_END      "AT+CIPCLOSE  = 0"
 
-#define WIFI_NAME "doom"
-#define WIFI_PASS "12345678"
+#define WIFI_NAME         "doom"
+#define WIFI_PASS         "12345678"
 
 void setup() {
 	pinMode(lockMotor, OUTPUT);
