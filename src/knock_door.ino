@@ -36,6 +36,7 @@ int hallValue = 0;  //giá trị cảm biến từ trường
 int isLock = true;  //đã khóa cửa hay chưa
 int timePressStart = 0;
 int pressTime   = 0;
+
 bool programButtonPressed  = false; // nút nhấn cửa bên trong
 bool programButtonPressed2 = false; // nút nhấn cửa bên ngoài
 bool isEnableDoorGuard     = false; // trạng thái bảo vệ cửa on/off
@@ -102,14 +103,13 @@ void loop() {
 	listenEventPress(programSwitch, programButtonPressed);
 	listenEventPress(programSwitch2, programButtonPressed2);
 
-	if (isLock == true) { //Nếu cửa đã khóa
-		pressToOpen(true);
-	}
-
-	if (isLock == true && isEnableDoorGuard == true)
-	{
-		pressToOpen();
-		listenToSecretKnock();
+	if (isLock == true) {
+		if (isEnableDoorGuard == true){
+			pressToOpen();
+			listenToSecretKnock();
+		} else {
+			pressToOpen(true);
+		}
 	}
 
 	if(digitalRead(hallPin) == LOW && isLock == false)  //Nếu cửa chưa đóng và chưa khóa
@@ -223,19 +223,19 @@ void listenToSecretKnock() {
 		}
 	}
 }
+
 //Chạy động cơ servo để mở khóa
 void triggerDoorUnlock() {
 	isLock = false;
 	Serial.println("Đã mở cửa!");
 	myservo.write(90); // mở cửa
-	delay(5000);
+	delay(2000);
 }
 
 void triggerDoorlock() {
-	isLock = true;
 	Serial.println("Đã khóa cửa!");
+	isLock = true;
 	myservo.write(180); // khóa cửa
-	delay(2000);
 }
 
 void pressToOpen(const bool enablePressOutdoor = false) {
@@ -259,7 +259,7 @@ void pressToOpen(const bool enablePressOutdoor = false) {
 
 // Kiểm tra cách gõ gõ cửa
 // trả về true nếu đúng và faslse nếu sai
-boolean validateKnock() {
+bool validateKnock() {
 	int i = 0;
 
 	// thiết lập bộ đếm để so sánh số lần gõ cửa
