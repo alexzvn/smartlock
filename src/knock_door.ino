@@ -8,11 +8,7 @@
 */
 
 #include <Servo.h>      // Thư viện điều khiển servo
-#include <SPI.h>
-#include "RFID.h"
 
-#define SS_PIN 10
-#define RST_PIN 9
 //Định nghĩa chân pin
 const int knockSensor = 0;   // Cảm biến áp điện
 const int programSwitch = 2; // Nút nhấn
@@ -32,27 +28,27 @@ const int knockFadeTime = 150;     // milis dây delay trước khi lắng nghe 
 const int maximumKnocks = 20;      // Số lần gõ cửa tối đa cho một kiểu gõ
 const int knockComplete = 1200;    // Thời gian chờ lâu nhất để xác nhận gõ cửa xong
 
-//Cẫu hình RIFD (đọc thẻ)
-RFID rfid(SS_PIN, RST_PIN);
-unsigned char i, j;
-unsigned char reading_card[5];
-unsigned char master[5] = {217, 146, 218, 62, 175}; // Mã Card phù hợp để mở cửa
-unsigned char slave[5] = {57, 51, 164, 174, 0};     // Mã Card phù hợp để đóng cửa
-
 // Biến.
 int secretCode[maximumKnocks] = {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int knockReadings[maximumKnocks]; // Khi ai đó gõ cửa, biến này sẽ lưu lại khoảng cách giữa mỗi lần gõ
 int knockSensorValue = 0; // Lưu lại giá trị trả về từ cảm biến áp điện.
-int programButtonPressed = false;
 int hallValue = 0;  //giá trị cảm biến từ trường
 int isLock = true;  //đã khóa cửa hay chưa
 int timePressStart = 0;
 int pressTime   = 0;
+bool programButtonPressed  = false; // nút nhấn cửa bên trong
+bool programButtonPressed2 = false; // nút nhấn cửa bên ngoài
+bool isEnableDoorGuard     = false; // trạng thái bảo vệ cửa on/off
+
 
 //Cẫu hình động cơ servo
 const int servoUnlock = 90;
 const int servoLock = 120;
 Servo myservo;
+
+/****************************************
+ *          WIFI CONFIG                 *
+*****************************************/
 
 void setup() {
 	pinMode(lockMotor, OUTPUT);
@@ -65,8 +61,6 @@ void setup() {
 	Serial.println("Program start.");
 
 	myservo.attach(servoPin);
-	SPI.begin();
-	rfid.init();
 
 	digitalWrite(greenLED, HIGH); // Để đèn xanh trong trạng thái chờ
 	triggerDoorlock();
@@ -76,23 +70,19 @@ void loop() {
 	// lắng nghe cảm biến, nếu có tiếng gõ
 	knockSensorValue = analogRead(knockSensor);
 
-	if (digitalRead(programSwitch) == HIGH) { // nếu đã nhấn nút
-		programButtonPressed = true; // lưu lại sự kiện
-		digitalWrite(redLED, HIGH); // và hiện đèn đỏ
-	} else {
-		programButtonPressed = false;
-		digitalWrite(redLED, LOW);
-	}
+	listenEventPress(programSwitch, programButtonPressed);
+	listenEventPress(programSwitch2, programButtonPressed2);
 
 	if (isLock == true) { //Nếu cửa đã khóa
-		pressToOpen();
-		if (knockSensorValue >= threshold) { // nếu có gõ cửa
-			Serial.println(knockSensorValue);
-			listenToSecretKnock();
-		} else {
-			isCard(); //check xem có thẻ hay không
-		}
+		pressToOpen(true);
 	}
+
+	if (isLock == true && isEnableDoorGuard == true)
+	{
+		pressToOpen();
+		listenToSecretKnock();
+	}
+	
 
 	if(digitalRead(hallPin) == LOW && isLock == false)  //Nếu cửa chưa đóng và chưa khóa
 	{
@@ -100,8 +90,23 @@ void loop() {
 	}
 }
 
+void listenEventPress(const int &switchButton, bool &button) {
+		if (digitalRead(switchButton) == HIGH) { // nếu đã nhấn nút
+		button = true; // lưu lại sự kiện
+		digitalWrite(redLED, HIGH); // và hiện đèn đỏ
+	} else {
+		button = false;
+		digitalWrite(redLED, LOW);
+	}
+}
+
 // Sự kiện khi người dùng gõ cửa
 void listenToSecretKnock() {
+	if (knockSensorValue <= threshold) { // nếu có gõ cửa
+		Serial.println(knockSensorValue);
+		return;
+	}
+
 	Serial.println("Gõ Bắt Đầu");
 
 	bool is_use_card = false;
@@ -203,13 +208,15 @@ void triggerDoorlock() {
 	delay(2000);
 }
 
-void pressToOpen() {
+void pressToOpen(const bool enablePressOutdoor = false) {
 	int timeout   = 300;
 	int now       = millis();
 
-	timePressStart = programButtonPressed && timePressStart == 0 ? now : timePressStart;
+	bool pressedButton = programButtonPressed ? true : (programButtonPressed2 && enablePressOutdoor ? true : false);
 
-	if (programButtonPressed == false) {
+	timePressStart = pressedButton && timePressStart == 0 ? now : timePressStart;
+
+	if (pressedButton == false) {
 		int time = now - timePressStart;
 
 		if (time > 0 && time < timeout) {
@@ -293,47 +300,4 @@ boolean validateKnock() {
 
 	return true;
 
-}
-
-boolean isCard() {
-	if (rfid.isCard()) {
-		if (rfid.readCardSerial()) // Nếu có thẻ
-		{
-			Serial.println();
-			for (i = 0; i < 5; i++) {
-				reading_card[i] = rfid.serNum[i];
-			}
-
-			//xác thực
-			for (i = 0; i < 5; i++) {
-				//So sáng từng phần tử của mảng reading_card với mảng master
-				if (reading_card[i] != master[i]) //Nếu có 1 phần tử bất kỳ nào không phù hợp...thỳ thoát vòng lặp, lúc này ta nhận được giá trị của i
-				{
-					break;
-				}
-			}
-
-			// Tương tự với thẻ Slave
-			for (j = 0; j < 5; j++) {
-				if (reading_card[i] != slave[i]) {
-					break;
-				}
-			}
-
-			if (j == 5) // Nếu các phần tử của màng reading_card phù hợp hết với mảng master thì lúc này i chạy đến 5
-			{//thẻ slave
-				//triggerDoorlock();
-				return true;
-			}
-
-			if (i == 5) { //thẻ master
-				triggerDoorUnlock();
-				return true;
-			}
-
-			rfid.halt();
-		}
-	}
-
-	return false;
 }
