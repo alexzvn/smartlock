@@ -11,8 +11,8 @@
 
 //Định nghĩa chân pin
 const int knockSensor    = 0; // Cảm biến áp điện
-const int programSwitch  = 2; // Nút nhấn
-const int programSwitch2 = 7; // Nút nhấn
+const int programSwitch  = 2; // Nút nhấn bên trong
+const int programSwitch2 = 7; // Nút nhấn bên ngoài
 const int lockMotor      = 8; // Động cơ mở cửa
 const int redLED         = 4; // LED trạng thái đỏ
 const int greenLED       = 5; // LED trạng thái xanh
